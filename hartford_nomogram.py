@@ -18,7 +18,9 @@ from typing import Dict, Any, List, Optional
 
 def calculate_metrics(**kwargs) -> Dict[str, Any]:
     """
-    Core domain algorithm for aminoglycoside-hartford-nomogram.
+    Core clinical & domain algorithm for aminoglycoside-hartford-nomogram.
+    Supports both clinical Hartford nomogram parameters (level, hours, crcl, amikacin)
+    and numeric observation metrics (v1, v2, v3).
     """
     params = {}
     for k, v in kwargs.items():
@@ -28,7 +30,43 @@ def calculate_metrics(**kwargs) -> Dict[str, Any]:
             except (ValueError, TypeError):
                 params[k] = str(v)
 
-    # Deterministic domain logic
+    # Check for Hartford nomogram clinical inputs
+    level = None
+    for k in ["level", "serum_level", "concentration", "v1", "primary_metric"]:
+        if k in params and isinstance(params[k], (int, float)):
+            level = float(params[k])
+            break
+
+    hours = None
+    for k in ["hour", "hours", "hours_post_dose", "v2", "secondary_metric"]:
+        if k in params and isinstance(params[k], (int, float)):
+            hours = float(params[k])
+            break
+
+    crcl = None
+    for k in ["crcl", "crcl_ml_min", "creatinine_clearance"]:
+        if k in params and isinstance(params[k], (int, float)):
+            crcl = float(params[k])
+            break
+
+    # If clinical inputs present, evaluate via Hartford nomogram curves
+    if level is not None and hours is not None and 6.0 <= hours <= 14.0:
+        crcl_val = crcl if crcl is not None else 80.0
+        is_amikacin = bool(str(kwargs.get("amikacin", "false")).lower() in ("true", "1", "yes"))
+        from hartford_extended_nomogram import hartford_interval
+        nom_res = hartford_interval(level, hours, crcl_val, amikacin=is_amikacin)
+        return {
+            "tool": "aminoglycoside-hartford-nomogram",
+            "score": round(level, 2),
+            "classification": nom_res.interval,
+            "clinical_recommendation": nom_res.rationale,
+            "drug": nom_res.drug,
+            "hours_post_dose": hours,
+            "crcl_ml_min": crcl_val,
+            "inputs_evaluated": len(params),
+        }
+
+    # Fallback / deterministic domain scoring
     numeric_vals = [val for val in params.values() if isinstance(val, (int, float))]
     primary_val = numeric_vals[0] if numeric_vals else 1.0
 
@@ -38,7 +76,6 @@ def calculate_metrics(**kwargs) -> Dict[str, Any]:
 
     rounded_score = round(score, 2)
     
-    # Classification / tiering
     if rounded_score < 10.0:
         tier = "Low / Standard"
         action = "Standard monitoring or negative cutoff"

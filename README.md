@@ -1,135 +1,118 @@
-# Aminoglycoside Hartford Nomogram
+# Hartford Once-Daily Aminoglycoside Nomogram
 
-> **Domain:** Clinical Pharmacology & Precision Pharmacotherapy  
-> **Reference Guidelines & Standards:** `CPIC Guidelines & FDA Table of Pharmacogenomic Biomarkers`
+A pure Python clinical pharmacokinetics and therapeutic drug monitoring (TDM) framework implementing the Hartford extended-interval nomogram (Nicolau et al., *Antimicrob Agents Chemother* 1995):
+- Extended-interval dosing of aminoglycosides (Gentamicin and Tobramycin at 7 mg/kg; Amikacin at 20 mg/kg).
+- Log-linear first-order elimination decay interpolation for random serum concentrations drawn 6 to 14 hours post-infusion start.
+- Nomogram interval assignment tiers:
+  - **q24h:** Concentrations falling below the q24h/q36h boundary.
+  - **q36h:** Concentrations falling between the q24h and q36h boundaries.
+  - **q48h:** Concentrations falling above the q36h boundary.
+  - **Individualized / Traditional PK:** Triggered when CrCl $< 60\text{ mL/min}$ or levels drawn outside the 6–14 h window.
+- Amikacin dose-proportional nomogram adaptation (2x scale factor on concentration cutoffs).
+- Two-point elimination rate constant ($k_{el}$), half-life ($t_{1/2}$), and expected trough concentration prediction.
+- Composite nephrotoxicity risk scoring combining baseline renal function, age, concurrent nephrotoxins (vancomycin), and sepsis.
+- Batch CSV cohort processing for clinical pharmacy and antimicrobial stewardship audits.
 
-<div align="center">
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
-
-</div>
-
----
-
-## 📖 What It Does
-
-Extended-interval aminoglycoside enrichment features for
-aminoglycoside-hartford-nomogram.
-
-Implements the top three items from specifications:
-
-1. Hartford extended-interval nomogram interval selection (Nicolau et al.,
-   1995): gentamicin/tobramycin 7 mg/kg, random level drawn 6-14 h after the
-   start of a 30-minute infusion; CrCl >= 60 mL/min required. The published
-   q24h/q36h and q36h/q48h boundary curves are reproduced from their
-   digitized anchor points and interpolated log-linearly (first-order decay).
-
-2. Amikacin nomogram extension: once-daily amikacin 20 mg/kg with the
-   institutional adaptation of doubling the gentamicin/tobramycin cutoffs
-   (proportional to the doubled mg/kg dose).
-
-3. Composite nephrotoxicity risk score combining baseline CrCl, age,
-   concurrent vancomycin, therapy duration, and sepsis/shock to set the
-   level-monitoring cadence.
-
-Author: Dr. Abu Suraih Sakhri
-License: MIT
-
-Hartford Once-Daily Aminoglycoside Nomogram
-Plots 6-to-14 hour post-dose gentamicin/tobramycin levels on Hartford nomogram for 24h/36h/48h interval selection.
-
-Zero-dependency Python implementation with single and batch evaluation.
-Author: Dr. Abu Suraih Sakhri
-License: MIT
+Requires Python standard library only (zero external runtime dependencies).
 
 ---
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+## Clinical Formulation & Nomogram Boundaries
 
-### 🔬 Core Algorithmic & Evaluation Engines
+### Boundary Curve Anchor Points (6–14 Hours Post-Dose)
+| Post-Dose Hour | q24h / q36h Boundary (mg/L) | q36h / q48h Boundary (mg/L) | Amikacin q24h / q36h (mg/L) | Amikacin q36h / q48h (mg/L) |
+|:--------------:|:---------------------------:|:---------------------------:|:---------------------------:|:---------------------------:|
+| 6 h | 11.9 | 17.9 | 23.8 | 35.8 |
+| 8 h | 8.1 | 11.6 | 16.2 | 23.2 |
+| 10 h | 5.5 | 7.5 | 11.0 | 15.0 |
+| 12 h | 3.8 | 4.9 | 7.6 | 9.8 |
+| 14 h | 2.6 | 3.2 | 5.2 | 6.4 |
 
-- **`NomogramResult`** — dedicated module for nomogram result evaluation and state verification.
-
----
-
-## 📐 Mathematical Formulation & Logic
-
-```text
-  score = primary_val
-  rounded_score = round(score, 2)
-  res = calculate_metrics(**kwargs)
-  calc_res = calculate_metrics(**r)
-```
+### Pharmacokinetic Equations
+$$k_{el} = \frac{\ln(C_1 / C_2)}{t_2 - t_1}, \quad t_{1/2} = \frac{\ln(2)}{k_{el}}$$
+$$\text{Predicted Trough} = C_0 \cdot e^{-k_{el} \cdot \tau}$$
 
 ---
 
-## 💻 CLI Quickstart & Usage
+## Features
 
-### 1. Guided Interactive Mode
+- **Standard Hartford Conformance:** Follows Nicolau et al. (1995) validation criteria with CrCl safety boundary guards ($\ge 60\text{ mL/min}$).
+- **Amikacin Scaling:** Built-in 2x dose-proportional scale for once-daily 20 mg/kg amikacin regimens.
+- **Trough & Accumulation Prediction:** Flags potential accumulation when predicted trough exceeds $2.0\text{ mg/L}$.
+- **Batch CSV Processing:** High-throughput clinical validation for hospital pharmacotherapy registries.
+
+---
+
+## Installation & Requirements
+
+- Python 3.10+ (tested on 3.10, 3.11, 3.12)
+- Zero external runtime dependencies. `pytest` is optional for running tests.
+
 ```bash
-python cli.py
+git clone https://github.com/abusuraihsakhri/aminoglycoside-hartford-nomogram.git
+cd aminoglycoside-hartford-nomogram
 ```
 
-### 2. Direct Parameterized Evaluation
+---
+
+## CLI Usage
+
+### 1. Single Concentration Evaluation (Gentamicin / Tobramycin)
 ```bash
-python cli.py --task-id <value> --target <value> --primary <value> --secondary <value>
+python cli.py single --level 7.2 --hours 8.0 --crcl 85.0
 ```
 
-### Parameter Reference
-- `--task-id`: Specifies input measurement or parameter value.
-- `--target`: Specifies input measurement or parameter value.
-- `--primary`: Specifies input measurement or parameter value.
-- `--secondary`: Specifies input measurement or parameter value.
-- `--critical`: Specifies input measurement or parameter value.
-- `--status`: Specifies input measurement or parameter value.
-- `--input`: Specifies input measurement or parameter value.
-- `--output`: Specifies input measurement or parameter value.
+### 2. Single Concentration Evaluation (Amikacin)
+```bash
+python cli.py single --level 15.0 --hours 8.0 --crcl 85.0 --amikacin
+```
 
-### Input Data Schema
+### 3. Supervisory Telemetry Audit
+```bash
+python cli.py audit --task-id TASK-2026-001 --primary 28.5 --secondary 14.2 --json
+```
 
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `Patient_ID` | Parameter / observation metric | Required |
-| `v1` | Parameter / observation metric | Required |
-| `v2` | Parameter / observation metric | Required |
-| `v3` | Parameter / observation metric | Required |
+### 4. Batch CSV Cohort Processing
+```bash
+python cli.py batch -i sample.csv -o results.csv
+```
 
 ---
 
-## 🛡️ Security & Enterprise Architecture
+## Python API Quickstart
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+```python
+from hartford_extended_nomogram import (
+    hartford_interval,
+    kel_from_two_levels,
+    half_life_hours,
+    nephrotoxicity_risk,
+)
+
+# 1. Determine Hartford Interval
+result = hartford_interval(level_mg_l=7.2, hours_post_dose=8.0, crcl_ml_min=85.0)
+print(f"Recommended Interval: {result.interval}")
+print(f"Rationale: {result.rationale}")
+
+# 2. Evaluate Nephrotoxicity Risk
+risk = nephrotoxicity_risk(
+    crcl_ml_min=55.0,
+    age_years=72,
+    on_vancomycin=True,
+    therapy_days=8,
+    sepsis_or_shock=False,
+)
+print(f"Nephrotoxicity Risk Tier: {risk['risk_tier']}")
+print(f"Monitoring Cadence: {risk['monitoring_cadence']}")
+```
 
 ---
 
-## 🧪 Testing & Verification
+## Running Tests
 
-Run the automated test suite:
+Run the test suite using standard `unittest` or `pytest`:
 
 ```bash
 pytest -v
 ```
 
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py --tasks 1000 --concurrency 8
-```
-
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t aminoglycoside-hartford-nomogram .
-docker run -p 8000:8000 aminoglycoside-hartford-nomogram
-```
